@@ -1,0 +1,195 @@
+---
+# =============================================================
+# ZABBIX AGENT - TASKS PRINCIPAIS
+# roles/zabbix_agent/tasks/main.yml
+# =============================================================
+
+# --- [REPO] Instalação do repositório Zabbix 6.0 LTS ---
+
+- name: "REPO | Instalar repositório Zabbix 6.0 para Oracle/RHEL 9"
+  yum:
+    name: "{{ zabbix_repo_rhel9 }}"
+    state: present
+    disable_gpg_check: yes
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution_major_version == "9"
+
+- name: "REPO | Instalar repositório Zabbix 6.0 para Oracle/RHEL 8"
+  yum:
+    name: "{{ zabbix_repo_rhel8 }}"
+    state: present
+    disable_gpg_check: yes
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution_major_version == "8"
+
+- name: "REPO | Instalar repositório Zabbix 6.0 para Oracle/RHEL 7"
+  yum:
+    name: "{{ zabbix_repo_rhel7 }}"
+    state: present
+    disable_gpg_check: yes
+  when:
+    - ansible_os_family == "RedHat"
+    - ansible_distribution_major_version == "7"
+
+- name: "REPO | Baixar pacote .deb do repositório Zabbix para Ubuntu"
+  get_url:
+    url: >-
+      {% if ansible_distribution_version == "24.04" %}{{ zabbix_repo_ubuntu2404 }}
+      {% elif ansible_distribution_version == "22.04" %}{{ zabbix_repo_ubuntu2204 }}
+      {% elif ansible_distribution_version == "20.04" %}{{ zabbix_repo_ubuntu2004 }}
+      {% else %}{{ zabbix_repo_ubuntu2204 }}{% endif %}
+    dest: /tmp/zabbix-release.deb
+    mode: '0644'
+  when:
+    - ansible_distribution == "Ubuntu"
+
+- name: "REPO | Instalar pacote .deb do repositório Zabbix no Ubuntu"
+  apt:
+    deb: /tmp/zabbix-release.deb
+    state: present
+  when:
+    - ansible_distribution == "Ubuntu"
+
+- name: "REPO | Instalar repositório Zabbix 6.0 para Amazon Linux 2023"
+  yum:
+    name: "{{ zabbix_repo_amazon2023 }}"
+    state: present
+    disable_gpg_check: yes
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2023"
+
+- name: "REPO | Atualizar cache APT após adicionar repositório"
+  apt:
+    update_cache: yes
+  when:
+    - ansible_os_family == "Debian"
+
+# --- [INSTALL] Instalação do pacote ---
+
+- name: "INSTALL | Instalar pacote zabbix-agent"
+  package:
+    name: "{{ zabbix_agent_package_name }}"
+    state: present
+
+# --- [CONFIG] Aplicar configuração do agente ---
+
+- name: "CONFIG | Garantir diretório de configuração"
+  file:
+    path: /etc/zabbix
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "CONFIG | Aplicar template de configuração do Zabbix Agent"
+  template:
+    src: zabbix_agentd.conf.j2
+    dest: "{{ zabbix_agent_conf_path }}"
+    owner: root
+    group: zabbix
+    mode: '0640'
+    backup: yes
+  notify: Restart zabbix agent
+
+# --- [FIREWALL] Parar e desabilitar firewalld ---
+
+- name: "FIREWALL | Verificar se firewalld está instalado"
+  shell: "systemctl list-unit-files firewalld.service 2>/dev/null | grep firewalld || echo 'NOT_FOUND'"
+  register: firewalld_installed
+  changed_when: false
+  failed_when: false
+
+- name: "FIREWALL | Parar e desabilitar firewalld"
+  service:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when:
+    - "'NOT_FOUND' not in firewalld_installed.stdout"
+
+# --- [IPTABLES] Limpar todas as regras ---
+
+- name: "IPTABLES | Verificar se iptables está disponível"
+  command: which iptables
+  register: iptables_exists
+  changed_when: false
+  failed_when: false
+
+- name: "IPTABLES | Flush de todas as regras"
+  shell: |
+    iptables -F
+    iptables -X
+    iptables -Z
+    iptables -P INPUT ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+  when: iptables_exists.rc == 0
+
+# --- [SELINUX] Colocar em modo permissivo ---
+
+- name: "SELINUX | Verificar status atual"
+  command: getenforce
+  register: selinux_status
+  changed_when: false
+  failed_when: false
+
+- name: "SELINUX | Colocar em modo permissivo"
+  selinux:
+    policy: targeted
+    state: permissive
+  when:
+    - selinux_status.rc == 0
+    - selinux_status.stdout | trim == "Enforcing"
+    - ansible_os_family == "RedHat"
+
+# --- [SERVICE] Habilitar e iniciar serviço ---
+
+- name: "SERVICE | Habilitar e iniciar zabbix-agent"
+  service:
+    name: "{{ zabbix_agent_service_name }}"
+    state: started
+    enabled: true
+
+# --- [VALIDATE] Validar agente local ---
+
+- name: "VALIDATE | Aguardar porta {{ zabbix_agent_listenport }} responder"
+  wait_for:
+    host: "127.0.0.1"
+    port: "{{ zabbix_agent_listenport }}"
+    timeout: 30
+    state: started
+
+- name: "VALIDATE | Testar resposta local do agente"
+  shell: "zabbix_agentd -t system.hostname"
+  register: agent_test
+  changed_when: false
+  failed_when: agent_test.rc != 0
+
+- name: "VALIDATE | Resultado do teste local"
+  debug:
+    msg: "Agente respondeu: {{ agent_test.stdout }}"
+
+# --- [ZABBIX] Cadastrar host via script Python ---
+
+- name: "ZABBIX | Cadastrar e validar host no Zabbix Server"
+  script:
+    cmd: >
+      zabbix_register.py
+      "{{ zabbix_api_url }}"
+      "{{ zabbix_api_user }}"
+      "{{ zabbix_api_password }}"
+      "{{ inventory_hostname }}"
+      "{{ ansible_default_ipv4.address }}"
+      "{{ zabbix_host_group }}"
+      "{{ zabbix_template }}"
+      "{{ zabbix_agent_listenport }}"
+    executable: python3
+  register: zabbix_register_result
+  changed_when: "'CADASTRADO' in zabbix_register_result.stdout"
+
+- name: "ZABBIX | Resultado do cadastro"
+  debug:
+    msg: "{{ zabbix_register_result.stdout_lines }}"

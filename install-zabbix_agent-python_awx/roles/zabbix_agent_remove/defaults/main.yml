@@ -1,0 +1,12 @@
+---
+# =============================================================
+# ZABBIX AGENT REMOVE - VARIÁVEIS PADRÃO (sobrescrevíveis pelo Survey)
+# roles/zabbix_agent_remove/defaults/main.yml
+# =============================================================
+
+# --- Pacote e Serviço ---
+zabbix_agent_package_name: zabbix-agent
+zabbix_agent_service_name: zabbix-agent
+
+# --- API do Zabbix ---
+zabbix_api_url: "http://{{ zabbix_server_host }}/api_jsonrpc.php"

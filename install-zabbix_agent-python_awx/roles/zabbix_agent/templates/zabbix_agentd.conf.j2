@@ -1,0 +1,32 @@
+# Zabbix Agent Configuration
+# Gerado automaticamente pelo Ansible AWX
+# Não editar manualmente - alterações serão sobrescritas
+
+# --- PID ---
+PidFile=/var/run/zabbix/zabbix_agentd.pid
+
+# --- Logs ---
+LogFile={{ zabbix_agent_logfile }}
+LogFileSize={{ zabbix_agent_logfilesize }}
+DebugLevel={{ zabbix_agent_debuglevel }}
+
+# --- Comandos Remotos ---
+# 0 = desabilitado (recomendado por segurança)
+EnableRemoteCommands={{ zabbix_agent_enable_remote_commands }}
+LogRemoteCommands={{ zabbix_agent_log_remote_commands }}
+
+# --- Porta de escuta do agent ---
+ListenPort={{ zabbix_agent_listenport }}
+
+# --- Servidor Zabbix (active checks) ---
+# O agent envia dados ativamente PARA estes endereços
+# Para agent clássico, usa o servidor primário
+ServerActive={{ zabbix_server_dns }}
+Server={{ zabbix_server_primary }}
+
+# --- Identificação do Host ---
+# Usa o hostname exato conforme registrado no inventário Ansible
+Hostname={{ inventory_hostname }}
+
+# --- Includes ---
+Include=/etc/zabbix/zabbix_agentd.d/*.conf

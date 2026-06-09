@@ -1,0 +1,9 @@
+---
+# =============================================================
+# ZABBIX AGENT REMOVE - HANDLERS
+# roles/zabbix_agent_remove/handlers/main.yml
+# =============================================================
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes

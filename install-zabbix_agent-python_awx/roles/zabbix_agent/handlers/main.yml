@@ -1,0 +1,10 @@
+---
+# =============================================================
+# ZABBIX AGENT - HANDLERS
+# roles/zabbix_agent/handlers/main.yml
+# =============================================================
+
+- name: Restart zabbix agent
+  service:
+    name: "{{ zabbix_agent_service_name }}"
+    state: restarted

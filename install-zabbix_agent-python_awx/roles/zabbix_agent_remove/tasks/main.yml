@@ -1,0 +1,116 @@
+---
+# =============================================================
+# ZABBIX AGENT REMOVE - TASKS PRINCIPAIS
+# roles/zabbix_agent_remove/tasks/main.yml
+# =============================================================
+
+# --- [ZABBIX API] Remover host do Zabbix Server ---
+
+- name: "ZABBIX | Desregistrar host no Zabbix Server"
+  script:
+    cmd: >
+      zabbix_downgrade.py
+      "{{ zabbix_api_url }}"
+      "{{ zabbix_api_user }}"
+      "{{ zabbix_api_password }}"
+      "{{ inventory_hostname }}"
+    executable: python3
+  register: zabbix_deregister_result
+  changed_when: "'REMOVIDO' in zabbix_deregister_result.stdout"
+  failed_when: zabbix_deregister_result.rc != 0
+
+- name: "ZABBIX | Resultado do desregistro"
+  debug:
+    msg: "{{ zabbix_deregister_result.stdout_lines }}"
+
+# --- [SERVICE] Parar e desabilitar serviço ---
+
+- name: "SERVICE | Verificar se zabbix-agent está instalado"
+  shell: "systemctl list-unit-files {{ zabbix_agent_service_name }}.service 2>/dev/null | grep {{ zabbix_agent_service_name }} || echo 'NOT_FOUND'"
+  register: agent_service_check
+  changed_when: false
+  failed_when: false
+
+- name: "SERVICE | Parar e desabilitar zabbix-agent"
+  service:
+    name: "{{ zabbix_agent_service_name }}"
+    state: stopped
+    enabled: false
+  when: "'NOT_FOUND' not in agent_service_check.stdout"
+
+# --- [UNINSTALL] Remover pacote do agente ---
+
+- name: "UNINSTALL | Remover pacote zabbix-agent (RedHat)"
+  yum:
+    name: "{{ zabbix_agent_package_name }}"
+    state: absent
+  when: ansible_os_family == "RedHat"
+  notify: Reload systemd
+
+- name: "UNINSTALL | Remover pacote zabbix-agent (Debian/Ubuntu)"
+  apt:
+    name: "{{ zabbix_agent_package_name }}"
+    state: absent
+    purge: yes
+  when: ansible_os_family == "Debian"
+  notify: Reload systemd
+
+# --- [REPO] Remover repositório Zabbix ---
+
+- name: "REPO | Remover pacote zabbix-release (RedHat)"
+  yum:
+    name: "zabbix-release"
+    state: absent
+  when: ansible_os_family == "RedHat"
+
+- name: "REPO | Remover arquivo .deb do repositório Zabbix (Debian/Ubuntu)"
+  file:
+    path: /tmp/zabbix-release.deb
+    state: absent
+  when: ansible_os_family == "Debian"
+
+- name: "REPO | Remover repositório Zabbix do apt (Debian/Ubuntu)"
+  file:
+    path: /etc/apt/sources.list.d/zabbix.list
+    state: absent
+  when: ansible_os_family == "Debian"
+
+# --- [CLEANUP] Remover diretórios residuais ---
+
+- name: "CLEANUP | Remover diretório de configuração /etc/zabbix"
+  file:
+    path: /etc/zabbix
+    state: absent
+
+- name: "CLEANUP | Remover diretório de logs /var/log/zabbix"
+  file:
+    path: /var/log/zabbix
+    state: absent
+
+- name: "CLEANUP | Remover diretório de dados /var/lib/zabbix"
+  file:
+    path: /var/lib/zabbix
+    state: absent
+
+# --- [VALIDATE] Confirmar remoção ---
+
+- name: "VALIDATE | Confirmar que pacote foi removido"
+  shell: "rpm -qa | grep zabbix-agent || echo 'NOT_INSTALLED'"
+  register: package_check
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "RedHat"
+
+- name: "VALIDATE | Confirmar que pacote foi removido (Debian/Ubuntu)"
+  shell: "dpkg -l | grep zabbix-agent || echo 'NOT_INSTALLED'"
+  register: package_check_deb
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "Debian"
+
+- name: "VALIDATE | Resultado da remoção"
+  debug:
+    msg: "Zabbix Agent removido com sucesso do host '{{ inventory_hostname }}'."
+  when: >
+    (ansible_os_family == "RedHat" and 'NOT_INSTALLED' in package_check.stdout) or
+    (ansible_os_family == "Debian" and 'NOT_INSTALLED' in package_check_deb.stdout)

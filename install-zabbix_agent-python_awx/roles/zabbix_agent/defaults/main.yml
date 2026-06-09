@@ -1,0 +1,13 @@
+---
+# =============================================================
+# ZABBIX AGENT - VARIÁVEIS PADRÃO (sobrescrevíveis pelo Survey)
+# roles/zabbix_agent/defaults/main.yml
+# =============================================================
+
+# --- Porta do agente ---
+zabbix_agent_listenport: 10050
+
+# --- Grupo e Template no Zabbix ---
+# Estes valores podem ser sobrescritos via AWX Survey
+zabbix_host_group: "YOUR_HOST_GROUP"
+zabbix_template: "Template OS Linux by Zabbix agent"

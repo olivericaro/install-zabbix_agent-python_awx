@@ -1,0 +1,8 @@
+---
+- name: Remover Zabbix Agent e desregistrar host no Zabbix
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - zabbix_agent_remove
