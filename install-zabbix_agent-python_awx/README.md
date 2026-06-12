@@ -106,7 +106,7 @@ AWX Survey (grupo e template)
 
 | Campo           | Variável            | Padrão                              |
 |-----------------|---------------------|-------------------------------------|
-| Grupo Zabbix    | `zabbix_host_group` | `-CDC_CLOUD`                        |
+| Grupo Zabbix    | `zabbix_host_group` | `-YOUR-ZABBIX-HOST-GROUP`                        |
 | Template Zabbix | `zabbix_template`   | `Template OS Linux by Zabbix agent` |
 
 ### Pré-requisitos
